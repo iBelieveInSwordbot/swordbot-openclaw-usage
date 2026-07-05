@@ -19,7 +19,7 @@ import {
   upsertChannelLabel,
   resolveChannelLabel,
 } from '../db';
-import { lookupPrice, estimateCost } from '../pricing';
+import { lookupPrice, estimateCost, lookupImagePrice } from '../pricing';
 
 export interface ScanResult {
   filesScanned: number;
@@ -52,6 +52,70 @@ async function findTrajectoryFiles(openclawRoot: string): Promise<Array<{ path: 
     }
   }
   return results;
+}
+
+/**
+ * Extract image_generate tool successes from a record. Each image_generate
+ * task appears in 3 trajectory events per session (context.compiled,
+ * prompt.submitted, model.completed) all sharing the same runId
+ * `image_generate:<uuid>:ok`. We dedupe by runId within one scan pass;
+ * the model_calls UNIQUE(session_id, ts_ms, model, input_tokens, output_tokens)
+ * constraint handles idempotency across scans.
+ *
+ * The "child result" text embedded in the record's finalPromptText /
+ * prompt / messages contains lines like:
+ *   "Generated N image with google/gemini-3.1-flash-image-preview."
+ * That is the sole signal we use to attribute cost to a specific model.
+ */
+function extractImageGenerationsFromRecord(
+  rec: any,
+  ctx: { agent: string; sessionId: string; seenRunIds: Set<string> },
+): ModelCall[] {
+  const runId: string = typeof rec?.runId === 'string' ? rec.runId : '';
+  if (!runId.startsWith('image_generate:') || !runId.endsWith(':ok')) return [];
+  if (ctx.seenRunIds.has(runId)) return [];
+
+  // Scan the whole record as JSON text for the "Generated N image with <p>/<m>" line.
+  const blob = JSON.stringify(rec);
+  // Provider is a simple slug; model may include dots/hyphens (e.g.
+  // "gemini-3.1-flash-image-preview"). Strip a trailing period if the sentence
+  // ended right after the model name.
+  const m = /Generated\s+(\d+)\s+image[s]?\s+with\s+([a-z0-9_-]+)\/([a-z0-9][a-z0-9._-]*[a-z0-9])/i.exec(blob);
+  if (!m) return [];
+
+  const count = Number(m[1]) || 1;
+  const provider = m[2].toLowerCase();
+  const model = m[3].toLowerCase();
+  const tsMs = Date.parse(rec.ts || '') || Date.now();
+  const price = lookupImagePrice(provider, model);
+  const perImage = price ? price.perImage : 0;
+  const total = perImage * count;
+
+  ctx.seenRunIds.add(runId);
+
+  return [{
+    agent: ctx.agent,
+    session_id: ctx.sessionId,
+    provider,
+    model,
+    api: 'image_generate',
+    chat_id: null,
+    channel: null,
+    ts_ms: tsMs,
+    // Encode image count in output_tokens so we get a natural per-call quantity
+    // in the dashboard, without adding a new column. cost_source disambiguates.
+    input_tokens: 0,
+    output_tokens: count,
+    cache_read: 0,
+    cache_write: 0,
+    cost_input_usd: 0,
+    cost_output_usd: total,
+    cost_cache_read_usd: 0,
+    cost_cache_write_usd: 0,
+    cost_total_usd: total,
+    cost_source: price ? 'image_per_call' : 'image_unpriced',
+    stop_reason: null,
+  }];
 }
 
 /** Parse a trajectory record and extract any assistant messages with usage. */
@@ -237,6 +301,7 @@ async function scanFile(
   const sessionId = path.basename(filePath).replace(/\.trajectory\.jsonl$|\.jsonl$/, '');
   const lines = parseable.split('\n');
   const allCalls: ModelCall[] = [];
+  const seenImageRunIds = new Set<string>();
   let errors = 0;
   for (const line of lines) {
     const trimmed = line.trim();
@@ -254,6 +319,9 @@ async function scanFile(
         }
       }
       allCalls.push(...calls);
+      // Image generation tool calls (bypass the trajectory usage pipeline).
+      const imgCalls = extractImageGenerationsFromRecord(rec, { agent, sessionId, seenRunIds: seenImageRunIds });
+      allCalls.push(...imgCalls);
     } catch { errors++; }
   }
 

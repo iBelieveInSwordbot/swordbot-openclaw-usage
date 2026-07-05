@@ -55,6 +55,45 @@ export const PRICING: PriceEntry[] = [
   { match: 'openclaw/',               input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 ];
 
+/**
+ * Per-image pricing for image-generation models (USD per image).
+ * Substring match against `${provider}/${model}` (case-insensitive),
+ * most-specific-first. Accurate as of 2026-07-05 (Google published rates).
+ *
+ * Note: OpenClaw's image_generate tool bypasses the trajectory usage/cost
+ * pipeline, so these are inferred by counting `image_generate:*:ok`
+ * runIds in trajectory files and multiplying by the flat per-image rate.
+ */
+export interface ImagePriceEntry {
+  /** substring match against `${provider}/${model}` (case-insensitive) */
+  match: string;
+  /** USD per generated image */
+  perImage: number;
+}
+
+export const IMAGE_PRICING: ImagePriceEntry[] = [
+  // Google Gemini image models ("Nano Banana" family + Imagen)
+  { match: 'google/gemini-3.1-flash-image', perImage: 0.039 }, // Nano Banana 2 (1024x)
+  { match: 'google/gemini-2.5-flash-image', perImage: 0.039 }, // Nano Banana 1 (1024x)
+  { match: 'google/nano-banana',            perImage: 0.039 },
+  { match: 'google/imagen-4',               perImage: 0.04 },
+  { match: 'google/imagen-3',               perImage: 0.04 },
+
+  // OpenAI image models
+  { match: 'openai/gpt-image-2',            perImage: 0.19 }, // hi-quality 1024x
+  { match: 'openai/gpt-image-1.5',          perImage: 0.19 },
+  { match: 'openai/gpt-image-1',            perImage: 0.19 },
+  { match: 'openai/dall-e-3',               perImage: 0.04 }, // standard 1024x
+];
+
+export function lookupImagePrice(provider: string, model: string): ImagePriceEntry | undefined {
+  const key = `${provider}/${model}`.toLowerCase();
+  for (const p of IMAGE_PRICING) {
+    if (key.includes(p.match.toLowerCase())) return p;
+  }
+  return undefined;
+}
+
 /** Look up a price entry. Returns undefined if no match (call remains unpriced). */
 export function lookupPrice(provider: string, model: string): PriceEntry | undefined {
   const key = `${provider}/${model}`.toLowerCase();
