@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
+import fs from 'node:fs';
 import { loadConfig } from './config';
 import { openDb } from './db';
 import { scanAll, watchTrajectories } from './scanner/trajectory-scanner';
@@ -36,10 +37,27 @@ async function main() {
   // API
   // ==============================================================
 
+  // Resolve OpenClaw install date once at startup. Falls back to first
+  // seen model call if the directory birthtime isn't available.
+  const installDateMs = (() => {
+    try {
+      const st = fs.statSync(cfg.openclawRoot);
+      // birthtime is the real creation time on macOS/APFS; mtime is a
+      // safer fallback on filesystems that don't preserve birthtime.
+      const t = (st as any).birthtimeMs || st.birthtime.getTime() || st.mtime.getTime();
+      if (t && Number.isFinite(t)) return t;
+    } catch { /* ignore */ }
+    const first = db.prepare(`SELECT MIN(ts_ms) AS t FROM model_calls`).get() as any;
+    return first?.t || Date.now();
+  })();
+  console.log(`[install] openclaw install date resolved to ${new Date(installDateMs).toISOString()}`);
+
   app.get('/api/health', async () => ({
     ok: true,
     port: cfg.port,
     openclawRoot: cfg.openclawRoot,
+    installDateMs,
+    installDateIso: new Date(installDateMs).toISOString(),
     lastScan: lastScanSummary,
     now: new Date().toISOString(),
   }));

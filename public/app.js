@@ -52,6 +52,10 @@ const state = {
   // Values are YYYY-MM-DD strings (local dates from <input type="date">).
   customFrom: null,
   customTo: null,
+  // OpenClaw install date, filled in from /api/health on load. Used for
+  // the 'All' range so we anchor at true install date rather than a
+  // rolling window.
+  installDateIso: null,
   overview: null,
   spend: null,     // by-provider spend for window
   series: null,    // hourly stacked-by-provider series
@@ -83,6 +87,17 @@ function rangeQuery() {
     if (state.customFrom) parts.push(`from=${encodeURIComponent(state.customFrom)}`);
     if (state.customTo)   parts.push(`to=${encodeURIComponent(state.customTo)}`);
     return parts.join('&');
+  }
+  // 'All' means everything since OpenClaw was installed — anchor at
+  // that absolute date rather than a rolling window.
+  if (state.window === 'all') {
+    if (state.installDateIso) {
+      // Slice YYYY-MM-DD out of the ISO datetime.
+      const day = state.installDateIso.slice(0, 10);
+      return `from=${encodeURIComponent(day)}`;
+    }
+    // Fallback until /api/health returns.
+    return 'window=365d';
   }
   return `window=${encodeURIComponent(state.window)}`;
 }
@@ -538,6 +553,13 @@ document.getElementById('rescan-btn').addEventListener('click', async () => {
   try { await fetch('/api/rescan', { method: 'POST' }); await refreshAll(); }
   finally { btn.disabled = false; }
 });
+
+// Fetch install date once at startup so 'All' anchors correctly.
+j('/api/health').then((h) => {
+  state.installDateIso = h.installDateIso || null;
+  // If the user landed on 'All' before health came back, re-fetch.
+  if (state.window === 'all') refreshAll();
+}).catch(() => { /* keep the 365d fallback */ });
 
 document.getElementById('theme-toggle').addEventListener('click', () => {
   const light = document.body.classList.toggle('theme-light');
