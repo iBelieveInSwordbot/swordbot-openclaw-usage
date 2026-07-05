@@ -32,10 +32,11 @@ export const SUBSCRIPTIONS: Subscription[] = [
     monthlyUsd: 20,
     provider: 'ollama',
     model: 'minimax-m2.5:cloud',
-    // Matt set up Minimax cloud subscription end of Feb 2026 (confirmed
-    // 2026-07-05). First API call in trajectory logs is mid-April, but
-    // the monthly fee has been billing since Feb regardless.
-    activeFromMs: Date.parse('2026-02-28T00:00:00-08:00'),
+    // Matt installed OpenClaw on 2026-02-25 (per `~/.openclaw` dir
+    // birth time) and set up the Minimax cloud subscription around
+    // the same time. First API call in trajectory logs is mid-April,
+    // but the monthly fee has been billing since install.
+    activeFromMs: Date.parse('2026-02-25T20:50:00-08:00'),
     activeToMs: null,
   },
 ];
