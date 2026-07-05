@@ -235,24 +235,52 @@ function extractCallsFromRecord(
     }
   }
 
+  // Only trust chat_id / conversation_label extraction from real
+  // trajectory records (schema=openclaw-trajectory). Legacy `.jsonl`
+  // files (Claude Code / TUI-native format) don't carry canonical chat
+  // metadata; any chat_id substrings inside them are from embedded
+  // context references to other sessions/channels and misattribute
+  // spend when trusted. TUI sessions have no chat channel.
+  //
+  // Usage extraction from those files is still valid — we just skip the
+  // chat_id lookup by returning early below when this flag is false.
+  const isTrajectory = rec?.traceSchema === 'openclaw-trajectory';
+
   // Look for a chat_id / conversation_label anywhere in the record's
   // finalPromptText (used by Slack channels, WhatsApp, etc).
   const findChatMeta = (o: any, depth = 0): void => {
     if (depth > 5 || !o) return;
     if (typeof o === 'string') {
-      // Regex to pull "chat_id": "channel:XYZ" and "conversation_label": "#name"
-      const cid = /"chat_id"\s*:\s*"([^"]+)"/.exec(o);
-      const clbl = /"conversation_label"\s*:\s*"([^"]+)"/.exec(o);
-      if (cid && clbl) channelLabel = { chatId: cid[1], label: clbl[1] };
+      // Regex to pull "chat_id": "channel:XYZ" and "conversation_label": "#name".
+      // These fields appear in two forms in the trajectory:
+      //   1. As real JSON fields at some object level: "chat_id": "..."
+      //   2. Embedded inside a finalPromptText/prompt STRING blob that has
+      //      the chat metadata JSON-serialized inside it. When JSON re-
+      //      serialized (visitor walk hits a string), the inner quotes get
+      //      re-escaped as \\" and this regex needs to accept both forms.
+      const cid = /\\?"chat_id\\?"\s*:\s*\\?"([^"\\]+)\\?"/.exec(o);
+      const clbl = /\\?"conversation_label\\?"\s*:\s*\\?"([^"\\]+)\\?"/.exec(o);
+      if (cid && clbl) {
+        // Sanity-check chat_id shape before accepting. Real values look
+        // like "channel:C0AJU4X0DG9", "bluebubbles:chat_guid:...", or
+        // "whatsapp:+14155551212". Reject bare placeholders like "XYZ"
+        // (leftover from doc/regex test strings that sometimes end up
+        // pasted into session context blobs).
+        const chatId = cid[1];
+        const looksReal = /^[a-z]+:[A-Za-z0-9_+\-:.@]+$/i.test(chatId) && chatId.length >= 10;
+        if (looksReal) channelLabel = { chatId, label: clbl[1] };
+      }
       return;
     }
     if (typeof o !== 'object') return;
     if (Array.isArray(o)) { for (const v of o) findChatMeta(v, depth + 1); return; }
     for (const v of Object.values(o)) findChatMeta(v, depth + 1);
   };
-  findChatMeta(rec);
-  if (channelLabel) {
-    for (const c of calls) c.chat_id = channelLabel.chatId;
+  if (isTrajectory) {
+    findChatMeta(rec);
+    if (channelLabel) {
+      for (const c of calls) c.chat_id = channelLabel.chatId;
+    }
   }
 
   return { calls, channelLabel };
@@ -302,6 +330,11 @@ async function scanFile(
   const lines = parseable.split('\n');
   const allCalls: ModelCall[] = [];
   const seenImageRunIds = new Set<string>();
+  // Session-level chat metadata: the trajectory embeds chat_id/label in
+  // event types that don't have usage (context.compiled, prompt.submitted),
+  // so we harvest it separately and apply to ALL calls in the file at the
+  // end. A session belongs to exactly one chat_id.
+  let fileChannelLabel: { chatId: string; label: string } | undefined;
   let errors = 0;
   for (const line of lines) {
     const trimmed = line.trim();
@@ -311,7 +344,12 @@ async function scanFile(
     catch { errors++; continue; }
     try {
       const { calls, channelLabel } = extractCallsFromRecord(rec, { agent, sessionId, filePath });
-      if (channelLabel) upsertChannelLabel(db, channelLabel.chatId, channelLabel.label);
+      if (channelLabel) {
+        upsertChannelLabel(db, channelLabel.chatId, channelLabel.label);
+        // First hit wins for file-level attribution; a session should never
+        // switch chat_ids mid-life, but if it does we prefer the earliest.
+        if (!fileChannelLabel) fileChannelLabel = channelLabel;
+      }
       // Resolve channel labels we've already learned about.
       for (const c of calls) {
         if (c.chat_id && !c.channel) {
@@ -323,6 +361,16 @@ async function scanFile(
       const imgCalls = extractImageGenerationsFromRecord(rec, { agent, sessionId, seenRunIds: seenImageRunIds });
       allCalls.push(...imgCalls);
     } catch { errors++; }
+  }
+
+  // Apply file-level chat metadata to any calls that didn't get it from
+  // their own record. This is the common case: `model.completed` events
+  // rarely embed chat_id, but the session's `context.compiled` events do.
+  if (fileChannelLabel) {
+    for (const c of allCalls) {
+      if (!c.chat_id) c.chat_id = fileChannelLabel.chatId;
+      if (!c.channel) c.channel = fileChannelLabel.label;
+    }
   }
 
   const inserted = insertModelCalls(db, allCalls);
