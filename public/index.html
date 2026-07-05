@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>OpenClaw Usage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="theme-dark">
+
+<aside class="rail">
+  <div class="rail-logo"><span class="rail-emoji">🗡️</span></div>
+  <nav class="rail-nav">
+    <button class="rail-item active" data-section="overview" aria-label="Overview">
+      <span class="material-symbols-rounded">dashboard</span>
+      <span class="rail-label">Overview</span>
+    </button>
+    <button class="rail-item" data-section="models" aria-label="Models">
+      <span class="material-symbols-rounded">smart_toy</span>
+      <span class="rail-label">Models</span>
+    </button>
+    <button class="rail-item" data-section="agents" aria-label="Agents">
+      <span class="material-symbols-rounded">groups</span>
+      <span class="rail-label">Agents</span>
+    </button>
+    <button class="rail-item" data-section="channels" aria-label="Channels">
+      <span class="material-symbols-rounded">chat</span>
+      <span class="rail-label">Channels</span>
+    </button>
+    <button class="rail-item" data-section="live" aria-label="Live">
+      <span class="material-symbols-rounded">bolt</span>
+      <span class="rail-label">Live</span>
+    </button>
+  </nav>
+  <div class="rail-foot">
+    <button class="rail-item" id="theme-toggle" aria-label="Toggle theme">
+      <span class="material-symbols-rounded" id="theme-icon">light_mode</span>
+    </button>
+  </div>
+</aside>
+
+<header class="appbar">
+  <div class="appbar-title">
+    <h1>OpenClaw Usage</h1>
+    <p class="subtitle">Real-time model-call spend across every agent</p>
+  </div>
+  <div class="appbar-actions">
+    <div class="range-toggle" id="range-toggle" role="tablist">
+      <button data-range="1d"  role="tab">24h</button>
+      <button data-range="3d"  role="tab">3d</button>
+      <button data-range="7d"  role="tab" class="active">7d</button>
+      <button data-range="30d" role="tab">30d</button>
+      <button data-range="90d" role="tab">All</button>
+    </div>
+    <span class="updated" id="last-updated"></span>
+    <button class="btn btn-tonal" id="rescan-btn">
+      <span class="material-symbols-rounded">refresh</span>
+      Rescan
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- =================================================== OVERVIEW -->
+  <section class="content active" id="overview">
+    <div class="kpi-hero">
+      <div class="kpi-hero-primary">
+        <div class="kpi-label">Spend, window selection</div>
+        <div class="kpi-value" id="kpi-window-spend">$0.00</div>
+        <div class="kpi-sub" id="kpi-window-meta">— calls · — tokens</div>
+      </div>
+      <div class="kpi-hero-side">
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">Today</div>
+          <div class="kpi-mini-value" id="kpi-today">$0.00</div>
+          <div class="kpi-mini-sub"  id="kpi-today-calls">0 calls</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">This week</div>
+          <div class="kpi-mini-value" id="kpi-week">$0.00</div>
+          <div class="kpi-mini-sub"  id="kpi-week-calls">0 calls</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">This month</div>
+          <div class="kpi-mini-value" id="kpi-month">$0.00</div>
+          <div class="kpi-mini-sub"  id="kpi-month-calls">0 calls</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">All time</div>
+          <div class="kpi-mini-value" id="kpi-alltime">$0.00</div>
+          <div class="kpi-mini-sub"  id="kpi-alltime-calls">0 calls</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="chart-card wide">
+        <div class="card-head">
+          <h3>Spend over time</h3>
+          <p class="hint">Stacked by provider — hover for hourly breakdown</p>
+        </div>
+        <canvas id="spend-timeline"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Provider mix</h3>
+          <p class="hint">Share of window spend</p>
+        </div>
+        <div class="donut-wrap">
+          <canvas id="provider-donut"></canvas>
+          <div class="donut-center">
+            <div class="donut-value" id="donut-total">$0.00</div>
+            <div class="donut-label">Total spend</div>
+          </div>
+        </div>
+        <div id="provider-legend" class="legend"></div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Top models by cost</h3>
+          <p class="hint">Where the money went</p>
+        </div>
+        <div id="top-models" class="ranking"></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-head">
+          <h3>Top channels</h3>
+          <p class="hint">Which rooms are the loudest</p>
+        </div>
+        <div id="top-channels" class="ranking"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================== MODELS -->
+  <section class="content" id="models">
+    <div class="chart-card wide">
+      <div class="card-head">
+        <h3>By model</h3>
+        <p class="hint">Cost, calls, tokens for the selected window</p>
+      </div>
+      <div id="models-table" class="table"></div>
+    </div>
+  </section>
+
+  <!-- =================================================== AGENTS -->
+  <section class="content" id="agents">
+    <div class="chart-card wide">
+      <div class="card-head">
+        <h3>By agent</h3>
+        <p class="hint">Spend attributed to each OpenClaw agent</p>
+      </div>
+      <div id="agents-table" class="table"></div>
+    </div>
+    <div class="chart-card wide">
+      <div class="card-head">
+        <h3>Agents over time</h3>
+        <p class="hint">Stacked hourly cost by agent</p>
+      </div>
+      <canvas id="agent-timeline"></canvas>
+    </div>
+  </section>
+
+  <!-- =================================================== CHANNELS -->
+  <section class="content" id="channels">
+    <div class="chart-card wide">
+      <div class="card-head">
+        <h3>By channel</h3>
+        <p class="hint">Spend per chat surface / room</p>
+      </div>
+      <div id="channels-table" class="table"></div>
+    </div>
+  </section>
+
+  <!-- =================================================== LIVE TAIL -->
+  <section class="content" id="live">
+    <div class="chart-card wide">
+      <div class="card-head">
+        <h3>Live tail</h3>
+        <p class="hint">Latest model calls · auto-refreshing</p>
+      </div>
+      <div id="live-tail" class="live-tail"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

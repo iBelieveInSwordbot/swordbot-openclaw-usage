@@ -1,0 +1,27 @@
+{
+  "name": "swordbot-openclaw-usage",
+  "version": "0.1.0",
+  "description": "Real-time OpenClaw model-call cost dashboard. Reads trajectory logs, aggregates by agent/model/channel/hour.",
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc --watch & node --watch dist/server.js",
+    "backfill": "tsx src/cli/backfill.ts",
+    "tail": "tsx src/cli/tail.ts",
+    "stats": "tsx src/cli/stats.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.0",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.5.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
