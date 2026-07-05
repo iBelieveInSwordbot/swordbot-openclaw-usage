@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Template LaunchAgent for auto-starting the OpenClaw Usage dashboard.
+  Copy to ~/Library/LaunchAgents/ai.wozbot.openclaw-usage.plist and
+  update the paths, then:
+
+    launchctl load ~/Library/LaunchAgents/ai.wozbot.openclaw-usage.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.wozbot.openclaw-usage</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>REPLACE_WITH_PROJECT_PATH/dist/server.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_WITH_PROJECT_PATH</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_WITH_HOME/wozbot/logs/openclaw-usage.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>REPLACE_WITH_HOME/wozbot/logs/openclaw-usage.err.log</string>
+</dict>
+</plist>
