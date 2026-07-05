@@ -61,6 +61,21 @@ const state = {
   channels: [],
 };
 
+/**
+ * Format a range label for the hero KPI. Reads from server response
+ * (sinceMs / endMs) so it's always accurate, including custom ranges.
+ */
+function describeCurrentRange(ov) {
+  if (!ov || !ov.sinceMs) return '—';
+  const since = new Date(ov.sinceMs);
+  const end = new Date(ov.endMs || Date.now());
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: (d.getFullYear() !== new Date().getFullYear()) ? 'numeric' : undefined });
+  const label = state.customFrom || state.customTo
+    ? 'Custom'
+    : (state.window || '');
+  return `${label} · ${fmt(since)} → ${fmt(end)}`;
+}
+
 /** Build the querystring for time-range parameters based on current state. */
 function rangeQuery() {
   if (state.customFrom || state.customTo) {
@@ -124,6 +139,7 @@ function renderOverview() {
   document.getElementById('kpi-window-spend').textContent = fmtUsd(windowTotals.cost_usd || 0);
   document.getElementById('kpi-window-meta').textContent =
     `${fmtNum(windowTotals.calls || 0)} calls · ${fmtNumShort(windowTotals.tokens || 0)} tokens`;
+  document.getElementById('kpi-window-range').textContent = describeCurrentRange(ov);
   document.getElementById('kpi-today').textContent   = fmtUsd(ov?.today?.cost_usd   || 0);
   document.getElementById('kpi-today-calls').textContent   = `${fmtNum(ov?.today?.calls || 0)} calls`;
   document.getElementById('kpi-week').textContent    = fmtUsd(ov?.week?.cost_usd    || 0);

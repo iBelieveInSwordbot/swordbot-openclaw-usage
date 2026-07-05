@@ -504,6 +504,7 @@ main {
 .kpi-hero-primary .kpi-label { color: var(--md-on-surface-variant); font-size: 13px; letter-spacing: 0.4px; }
 .kpi-hero-primary .kpi-value { font: 700 44px/1.1 'Google Sans', Roboto, system-ui; letter-spacing: -0.5px; margin: 6px 0; color: var(--md-on-surface); }
 .kpi-hero-primary .kpi-sub { color: var(--md-on-surface-variant); font-size: 13px; font-family: 'Roboto Mono', monospace; }
+.kpi-hero-primary .kpi-range { color: var(--md-on-surface-variant); font-size: 12px; font-family: 'Roboto Mono', monospace; opacity: 0.75; margin-top: 6px; letter-spacing: 0.2px; }
 
 .kpi-hero-side { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .kpi-mini {
