@@ -54,6 +54,21 @@
       <button data-range="7d"  role="tab" class="active">7d</button>
       <button data-range="30d" role="tab">30d</button>
       <button data-range="365d" role="tab">All</button>
+      <button data-range="custom" role="tab" id="range-custom-btn">Custom…</button>
+    </div>
+    <div class="range-custom-popover" id="range-custom-popover" hidden>
+      <label class="range-field">
+        <span>From</span>
+        <input type="date" id="range-from" />
+      </label>
+      <label class="range-field">
+        <span>To</span>
+        <input type="date" id="range-to" />
+      </label>
+      <div class="range-custom-actions">
+        <button class="btn btn-text" id="range-custom-cancel">Cancel</button>
+        <button class="btn btn-tonal" id="range-custom-apply">Apply</button>
+      </div>
     </div>
     <span class="updated" id="last-updated"></span>
     <button class="btn btn-tonal" id="rescan-btn">

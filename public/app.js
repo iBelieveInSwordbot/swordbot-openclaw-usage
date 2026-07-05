@@ -48,6 +48,10 @@ function providerColor(p) { return PROVIDER_COLORS[p] || PROVIDER_COLORS.unknown
 // -------------------------------- state
 const state = {
   window: '7d',
+  // When customFrom/customTo are set, they override window in the API call.
+  // Values are YYYY-MM-DD strings (local dates from <input type="date">).
+  customFrom: null,
+  customTo: null,
   overview: null,
   spend: null,     // by-provider spend for window
   series: null,    // hourly stacked-by-provider series
@@ -57,6 +61,17 @@ const state = {
   channels: [],
 };
 
+/** Build the querystring for time-range parameters based on current state. */
+function rangeQuery() {
+  if (state.customFrom || state.customTo) {
+    const parts = [];
+    if (state.customFrom) parts.push(`from=${encodeURIComponent(state.customFrom)}`);
+    if (state.customTo)   parts.push(`to=${encodeURIComponent(state.customTo)}`);
+    return parts.join('&');
+  }
+  return `window=${encodeURIComponent(state.window)}`;
+}
+
 // -------------------------------- data fetchers
 async function j(url) {
   const r = await fetch(url);
@@ -65,15 +80,15 @@ async function j(url) {
 }
 
 async function refreshAll() {
-  const w = state.window;
+  const r = rangeQuery();
   const [overview, byProvider, series, byModel, byAgent, byChannel, agentSeries] = await Promise.all([
-    j(`/api/overview?window=${w}`),
-    j(`/api/spend?window=${w}&groupBy=provider`),
-    j(`/api/series?window=${w}&bucket=hour&groupBy=provider`),
-    j(`/api/spend?window=${w}&groupBy=model`),
-    j(`/api/spend?window=${w}&groupBy=agent`),
-    j(`/api/spend?window=${w}&groupBy=channel`),
-    j(`/api/series?window=${w}&bucket=hour&groupBy=agent`),
+    j(`/api/overview?${r}`),
+    j(`/api/spend?${r}&groupBy=provider`),
+    j(`/api/series?${r}&bucket=hour&groupBy=provider`),
+    j(`/api/spend?${r}&groupBy=model`),
+    j(`/api/spend?${r}&groupBy=agent`),
+    j(`/api/spend?${r}&groupBy=channel`),
+    j(`/api/series?${r}&bucket=hour&groupBy=agent`),
   ]);
   state.overview = overview;
   state.spend = byProvider;
@@ -444,9 +459,61 @@ document.querySelectorAll('.rail-item[data-section]').forEach((b) => {
 document.getElementById('range-toggle').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-range]');
   if (!btn) return;
+  const value = btn.dataset.range;
+
+  // Custom button: open the date-range popover, don't refresh yet.
+  if (value === 'custom') {
+    const pop = document.getElementById('range-custom-popover');
+    const fromInput = document.getElementById('range-from');
+    const toInput = document.getElementById('range-to');
+    // Seed with existing values or sensible defaults (last 30 days).
+    if (!fromInput.value && !toInput.value) {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - 30);
+      fromInput.value = state.customFrom || toISODate(start);
+      toInput.value   = state.customTo   || toISODate(today);
+    }
+    pop.hidden = !pop.hidden;
+    return;
+  }
+
+  // Normal range button: clear any custom state, activate this button.
+  state.customFrom = null;
+  state.customTo = null;
+  document.getElementById('range-custom-popover').hidden = true;
   document.querySelectorAll('#range-toggle button').forEach((b) => b.classList.toggle('active', b === btn));
-  state.window = btn.dataset.range === '90d' ? '90d' : btn.dataset.range;
+  state.window = value;
   refreshAll();
+});
+
+// Custom range apply / cancel handlers.
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+document.getElementById('range-custom-apply').addEventListener('click', () => {
+  const from = document.getElementById('range-from').value || null;
+  const to = document.getElementById('range-to').value || null;
+  if (!from && !to) return;
+  state.customFrom = from;
+  state.customTo = to;
+  document.getElementById('range-custom-popover').hidden = true;
+  document.querySelectorAll('#range-toggle button').forEach((b) => b.classList.toggle('active', b.dataset.range === 'custom'));
+  refreshAll();
+});
+document.getElementById('range-custom-cancel').addEventListener('click', () => {
+  document.getElementById('range-custom-popover').hidden = true;
+});
+// Close popover on outside click.
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('range-custom-popover');
+  if (pop.hidden) return;
+  if (pop.contains(e.target)) return;
+  if (e.target.closest('#range-custom-btn')) return;
+  pop.hidden = true;
 });
 
 document.getElementById('rescan-btn').addEventListener('click', async () => {

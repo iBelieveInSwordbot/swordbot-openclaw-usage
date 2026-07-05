@@ -543,6 +543,42 @@ main {
   color: #fff;
 }
 
+/* --- Custom date-range popover --- */
+.appbar-actions { position: relative; }
+.range-custom-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  background: var(--md-surface-container-high);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  box-shadow: var(--elev-3, 0 8px 24px rgba(0,0,0,0.3));
+  min-width: 320px;
+}
+.range-custom-popover[hidden] { display: none; }
+.range-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--md-on-surface-variant); }
+.range-field input[type="date"] {
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: 400 13px/1 Roboto, system-ui;
+  color-scheme: dark;
+}
+.theme-light .range-field input[type="date"] { color-scheme: light; }
+.range-custom-actions { display: flex; gap: 8px; margin-left: auto; }
+.range-custom-actions .btn { padding: 6px 14px; font-size: 12px; }
+.btn-text { background: transparent; border: none; color: var(--md-on-surface-variant); cursor: pointer; border-radius: 999px; padding: 6px 12px; }
+.btn-text:hover { background: rgba(255,255,255,0.06); color: var(--md-on-surface); }
+.theme-light .btn-text:hover { background: rgba(0,0,0,0.05); }
+
 /* --- Ranking bars (top models / channels) --- */
 .ranking { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 20px; }
 .rank-row { display: flex; flex-direction: column; gap: 4px; }

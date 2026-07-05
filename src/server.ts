@@ -46,9 +46,8 @@ async function main() {
 
   /** Aggregate spend for a time window, grouped by whatever dimension you ask. */
   app.get('/api/spend', async (req) => {
-    const q = req.query as { window?: string; groupBy?: string };
-    const windowMs = parseWindow(q.window ?? '30d');
-    const sinceMs = Date.now() - windowMs;
+    const q = req.query as { window?: string; from?: string; to?: string; groupBy?: string };
+    const { sinceMs, endMs, window } = resolveTimeRange(q, '30d');
     const groupBy = (q.groupBy ?? 'model') as string;
     const groupCol = ({
       agent: 'agent',
@@ -70,15 +69,14 @@ async function main() {
         SUM(cache_write)   AS cache_write,
         SUM(cost_total_usd) AS cost_usd
       FROM model_calls
-      WHERE ts_ms >= ?
+      WHERE ts_ms >= ? AND ts_ms <= ?
       GROUP BY key
       ORDER BY cost_usd DESC, calls DESC
-    `).all(sinceMs) as any[];
+    `).all(sinceMs, endMs) as any[];
 
     // Fold in subscription (fixed monthly) cost, attributed to the same
     // grouping key it belongs to (e.g. Minimax $20/mo lands on
     // model=minimax-m2.5:cloud or provider=ollama). Amortized per hour.
-    const endMs = Date.now();
     const subRows = subscriptionSpendByGroup(sinceMs, endMs, groupBy as any);
     for (const s of subRows) {
       const existing = rows.find((r: any) => r.key === s.key);
@@ -92,8 +90,9 @@ async function main() {
     rows.sort((a: any, b: any) => (b.cost_usd || 0) - (a.cost_usd || 0) || (b.calls || 0) - (a.calls || 0));
 
     return {
-      window: q.window ?? '30d',
+      window,
       sinceMs,
+      endMs,
       groupBy,
       rows,
       totalCostUsd: rows.reduce((s, r) => s + (r.cost_usd || 0), 0),
@@ -103,15 +102,14 @@ async function main() {
 
   /** Time-series of spend, bucketed by hour, optionally filtered. */
   app.get('/api/series', async (req) => {
-    const q = req.query as { window?: string; bucket?: string; agent?: string; model?: string; provider?: string; groupBy?: string };
-    const windowMs = parseWindow(q.window ?? '7d');
-    const sinceMs = Date.now() - windowMs;
+    const q = req.query as { window?: string; from?: string; to?: string; bucket?: string; agent?: string; model?: string; provider?: string; groupBy?: string };
+    const { sinceMs, endMs, window } = resolveTimeRange(q, '7d');
     const bucketExpr = q.bucket === 'day'
       ? `strftime('%Y-%m-%d 00:00', ts_ms / 1000, 'unixepoch', 'localtime')`
       : `strftime('%Y-%m-%d %H:00', ts_ms / 1000, 'unixepoch', 'localtime')`;
 
-    const filters: string[] = ['ts_ms >= ?'];
-    const params: any[] = [sinceMs];
+    const filters: string[] = ['ts_ms >= ?', 'ts_ms <= ?'];
+    const params: any[] = [sinceMs, endMs];
     if (q.agent)    { filters.push('agent = ?'); params.push(q.agent); }
     if (q.provider) { filters.push('provider = ?'); params.push(q.provider); }
     if (q.model)    { filters.push('model = ?'); params.push(q.model); }
@@ -140,7 +138,7 @@ async function main() {
     const bucketKind = (q.bucket === 'day' ? 'day' : 'hour') as 'day' | 'hour';
     const seriesLabelBy = (groupBy === 'provider' || groupBy === 'model' || groupBy === 'agent')
       ? groupBy : 'total';
-    const subPoints = subscriptionSeriesPoints(sinceMs, Date.now(), bucketKind, seriesLabelBy as any, {
+    const subPoints = subscriptionSeriesPoints(sinceMs, endMs, bucketKind, seriesLabelBy as any, {
       provider: q.provider, model: q.model, agent: q.agent,
     });
     for (const p of subPoints) {
@@ -153,7 +151,7 @@ async function main() {
     }
     rows.sort((a: any, b: any) => a.bucket.localeCompare(b.bucket));
 
-    return { window: q.window ?? '7d', bucket: q.bucket ?? 'hour', groupBy: groupBy ?? null, points: rows };
+    return { window, sinceMs, endMs, bucket: q.bucket ?? 'hour', groupBy: groupBy ?? null, points: rows };
   });
 
   /** Live tail — most recent model calls. */
@@ -178,9 +176,8 @@ async function main() {
 
   /** Overview: KPIs for a window. */
   app.get('/api/overview', async (req) => {
-    const q = req.query as { window?: string };
-    const windowMs = parseWindow(q.window ?? '30d');
-    const sinceMs = Date.now() - windowMs;
+    const q = req.query as { window?: string; from?: string; to?: string };
+    const { sinceMs, endMs, window } = resolveTimeRange(q, '30d');
 
     const totals = db.prepare(`
       SELECT
@@ -193,8 +190,8 @@ async function main() {
         SUM(cost_total_usd) AS cost_usd,
         MAX(ts_ms) AS last_call_ts
       FROM model_calls
-      WHERE ts_ms >= ?
-    `).get(sinceMs) as any;
+      WHERE ts_ms >= ? AND ts_ms <= ?
+    `).get(sinceMs, endMs) as any;
 
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
     const today = db.prepare(`SELECT SUM(cost_total_usd) AS cost_usd, COUNT(*) AS calls FROM model_calls WHERE ts_ms >= ?`).get(today0.getTime()) as any;
@@ -206,13 +203,13 @@ async function main() {
 
     // Add subscription (fixed monthly) cost to each KPI, prorated to the window.
     const nowMs = Date.now();
-    totals.cost_usd = (totals.cost_usd || 0) + subscriptionCostForWindow(sinceMs, nowMs);
+    totals.cost_usd = (totals.cost_usd || 0) + subscriptionCostForWindow(sinceMs, endMs);
     today.cost_usd = (today.cost_usd || 0) + subscriptionCostForWindow(today0.getTime(), nowMs);
     week.cost_usd  = (week.cost_usd  || 0) + subscriptionCostForWindow(week0.getTime(),  nowMs);
     month.cost_usd = (month.cost_usd || 0) + subscriptionCostForWindow(month0.getTime(), nowMs);
     alltime.cost_usd = (alltime.cost_usd || 0) + subscriptionCostForWindow(0, nowMs);
 
-    return { window: q.window ?? '30d', sinceMs, totals, today, week, month, alltime };
+    return { window, sinceMs, endMs, totals, today, week, month, alltime };
   });
 
   /** List of known dimensions for UI filters. */
@@ -257,6 +254,52 @@ function parseWindow(s: string): number {
     case 'm': return n * 30 * 24 * 60 * 60 * 1000;
     default: return 30 * 24 * 60 * 60 * 1000;
   }
+}
+
+/**
+ * Resolve `{sinceMs, endMs}` from a query object supporting either a
+ * rolling window (`window=7d`) or an absolute range (`from=YYYY-MM-DD&
+ * to=YYYY-MM-DD` or ISO). Absolute range wins when both present. Dates
+ * are interpreted as local time; from = start of day, to = end of day.
+ */
+function resolveTimeRange(
+  q: { window?: string; from?: string; to?: string },
+  fallbackWindow: string,
+): { sinceMs: number; endMs: number; window: string } {
+  const nowMs = Date.now();
+  if (q.from || q.to) {
+    const fromMs = q.from ? parseDateInput(q.from, 'start') : 0;
+    const toMs = q.to ? parseDateInput(q.to, 'end') : nowMs;
+    return { sinceMs: fromMs, endMs: Math.min(toMs, nowMs), window: `custom:${q.from ?? ''}..${q.to ?? ''}` };
+  }
+  const w = q.window ?? fallbackWindow;
+  return { sinceMs: nowMs - parseWindow(w), endMs: nowMs, window: w };
+}
+
+/**
+ * Parse a date input as either an ISO datetime, YYYY-MM-DD (local),
+ * or epoch ms. `boundary` decides whether YYYY-MM-DD anchors at
+ * start-of-day (00:00) or end-of-day (23:59:59.999).
+ */
+function parseDateInput(s: string, boundary: 'start' | 'end'): number {
+  const trimmed = s.trim();
+  // Epoch ms
+  if (/^\d{10,13}$/.test(trimmed)) {
+    return parseInt(trimmed, 10);
+  }
+  // YYYY-MM-DD (local): anchor to start or end of day
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnly) {
+    const [_, y, m, d] = dateOnly;
+    const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+    if (boundary === 'end') dt.setHours(23, 59, 59, 999);
+    return dt.getTime();
+  }
+  // Full ISO datetime
+  const isoMs = Date.parse(trimmed);
+  if (!Number.isNaN(isoMs)) return isoMs;
+  // Fallback: now
+  return Date.now();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
