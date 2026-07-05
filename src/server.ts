@@ -4,6 +4,11 @@ import path from 'node:path';
 import { loadConfig } from './config';
 import { openDb } from './db';
 import { scanAll, watchTrajectories } from './scanner/trajectory-scanner';
+import {
+  subscriptionCostForWindow,
+  subscriptionSpendByGroup,
+  subscriptionSeriesPoints,
+} from './subscriptions';
 
 async function main() {
   const cfg = loadConfig();
@@ -70,6 +75,22 @@ async function main() {
       ORDER BY cost_usd DESC, calls DESC
     `).all(sinceMs) as any[];
 
+    // Fold in subscription (fixed monthly) cost, attributed to the same
+    // grouping key it belongs to (e.g. Minimax $20/mo lands on
+    // model=minimax-m2.5:cloud or provider=ollama). Amortized per hour.
+    const endMs = Date.now();
+    const subRows = subscriptionSpendByGroup(sinceMs, endMs, groupBy as any);
+    for (const s of subRows) {
+      const existing = rows.find((r: any) => r.key === s.key);
+      if (existing) {
+        existing.cost_usd = (existing.cost_usd || 0) + s.cost_usd;
+      } else {
+        rows.push({ key: s.key, calls: 0, input_tokens: 0, output_tokens: 0, cache_read: 0, cache_write: 0, cost_usd: s.cost_usd });
+      }
+    }
+    // Re-sort after subscription injection.
+    rows.sort((a: any, b: any) => (b.cost_usd || 0) - (a.cost_usd || 0) || (b.calls || 0) - (a.calls || 0));
+
     return {
       window: q.window ?? '30d',
       sinceMs,
@@ -114,6 +135,23 @@ async function main() {
       GROUP BY bucket, series
       ORDER BY bucket ASC
     `).all(...params) as any[];
+
+    // Merge subscription synthetic points, matching the bucket/series shape.
+    const bucketKind = (q.bucket === 'day' ? 'day' : 'hour') as 'day' | 'hour';
+    const seriesLabelBy = (groupBy === 'provider' || groupBy === 'model' || groupBy === 'agent')
+      ? groupBy : 'total';
+    const subPoints = subscriptionSeriesPoints(sinceMs, Date.now(), bucketKind, seriesLabelBy as any, {
+      provider: q.provider, model: q.model, agent: q.agent,
+    });
+    for (const p of subPoints) {
+      const existing = rows.find((r: any) => r.bucket === p.bucket && r.series === p.series);
+      if (existing) {
+        existing.cost_usd = (existing.cost_usd || 0) + p.cost_usd;
+      } else {
+        rows.push(p);
+      }
+    }
+    rows.sort((a: any, b: any) => a.bucket.localeCompare(b.bucket));
 
     return { window: q.window ?? '7d', bucket: q.bucket ?? 'hour', groupBy: groupBy ?? null, points: rows };
   });
@@ -165,6 +203,14 @@ async function main() {
     const month0 = new Date(); month0.setDate(1); month0.setHours(0, 0, 0, 0);
     const month = db.prepare(`SELECT SUM(cost_total_usd) AS cost_usd, COUNT(*) AS calls FROM model_calls WHERE ts_ms >= ?`).get(month0.getTime()) as any;
     const alltime = db.prepare(`SELECT SUM(cost_total_usd) AS cost_usd, COUNT(*) AS calls, MIN(ts_ms) AS first_ts FROM model_calls`).get() as any;
+
+    // Add subscription (fixed monthly) cost to each KPI, prorated to the window.
+    const nowMs = Date.now();
+    totals.cost_usd = (totals.cost_usd || 0) + subscriptionCostForWindow(sinceMs, nowMs);
+    today.cost_usd = (today.cost_usd || 0) + subscriptionCostForWindow(today0.getTime(), nowMs);
+    week.cost_usd  = (week.cost_usd  || 0) + subscriptionCostForWindow(week0.getTime(),  nowMs);
+    month.cost_usd = (month.cost_usd || 0) + subscriptionCostForWindow(month0.getTime(), nowMs);
+    alltime.cost_usd = (alltime.cost_usd || 0) + subscriptionCostForWindow(0, nowMs);
 
     return { window: q.window ?? '30d', sinceMs, totals, today, week, month, alltime };
   });
