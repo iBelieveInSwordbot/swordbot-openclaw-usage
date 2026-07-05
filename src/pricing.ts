@@ -25,6 +25,9 @@ export interface PriceEntry {
 export const PRICING: PriceEntry[] = [
   // -------- Anthropic --------
   { match: 'claude-opus-4-7',         input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
+  // Older Opus 4 snapshots (pre-4.7) — same list price
+  { match: 'claude-opus-4-20250514',  input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
+  { match: 'claude-opus-4-3-20250514',input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
   { match: 'claude-opus-4',           input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
   { match: 'claude-sonnet-4-6',       input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },
   { match: 'claude-sonnet-4',         input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },

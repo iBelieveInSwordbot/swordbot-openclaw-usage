@@ -21,7 +21,7 @@ export interface ModelCall {
   cost_cache_read_usd: number;
   cost_cache_write_usd: number;
   cost_total_usd: number;
-  cost_source: string;   // "logged" (from OpenClaw's own usage.cost.total) | "estimated" (local pricing table) | "unpriced"
+  cost_source: string;   // "logged" (from OpenClaw's own usage.cost.total) | "estimated" (local pricing table, no logged cost) | "recomputed" (local pricing table, ignored logged cost as unreliable) | "unpriced"
   stop_reason: string | null;
 }
 

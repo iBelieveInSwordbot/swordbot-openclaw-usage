@@ -65,6 +65,7 @@ function extractCallsFromRecord(
   // The messages array can live at rec.data.messages, rec.data.data.messages,
   // or at the top level. Handle all shapes.
   const candidateArrays: any[] = [];
+  const singletonMessages: any[] = [];
   const visit = (o: any, depth = 0) => {
     if (depth > 6 || !o || typeof o !== 'object') return;
     if (Array.isArray(o)) {
@@ -75,9 +76,20 @@ function extractCallsFromRecord(
       for (const v of o) visit(v, depth + 1);
       return;
     }
+    // Legacy session .jsonl format writes messages as record.message = { role, usage, provider, model, ... }
+    // These are single objects, not arrays. If we see an assistant message with a usage block
+    // and provider/model info, treat it as a standalone message.
+    if (o.role === 'assistant' && o.usage && typeof o.usage === 'object' &&
+        (o.provider || o.api || o.model)) {
+      singletonMessages.push(o);
+    }
     for (const v of Object.values(o)) visit(v, depth + 1);
   };
   visit(rec);
+  if (singletonMessages.length > 0) {
+    // Present them the same shape as candidateArrays entries.
+    candidateArrays.push(singletonMessages);
+  }
 
   const seen = new Set<string>();
   for (const arr of candidateArrays) {
@@ -105,21 +117,34 @@ function extractCallsFromRecord(
       let costCacheRead = Number(loggedCost?.cacheRead) || 0;
       let costCacheWrite = Number(loggedCost?.cacheWrite) || 0;
       let costTotal = Number(loggedCost?.total) || 0;
-      let costSource: 'logged' | 'estimated' | 'unpriced' = 'unpriced';
+      let costSource: 'logged' | 'estimated' | 'recomputed' | 'unpriced' = 'unpriced';
 
-      if (costTotal > 0) {
+      // OpenClaw's logged cost is unreliable for Anthropic (as of 2026-07-05):
+      // uses wrong output rate for Opus 4.7 (~$25/M vs actual $75/M), and
+      // does not cost cache reads or cache writes at all. Force recompute
+      // from tokens using our local pricing table. Other providers' logged
+      // costs match token-based estimates within a few percent, so trust them.
+      const providerIsAnthropic = provider === 'anthropic' || model.startsWith('claude-');
+      const price = lookupPrice(provider, model);
+
+      if (providerIsAnthropic && price) {
+        const est = estimateCost(price, { input: inp, output: out, cacheRead: cRead, cacheWrite: cWrite });
+        costInput = est.input;
+        costOutput = est.output;
+        costCacheRead = est.cacheRead;
+        costCacheWrite = est.cacheWrite;
+        costTotal = est.total;
+        costSource = est.total > 0 ? 'recomputed' : 'unpriced';
+      } else if (costTotal > 0) {
         costSource = 'logged';
-      } else {
-        const price = lookupPrice(provider, model);
-        if (price) {
-          const est = estimateCost(price, { input: inp, output: out, cacheRead: cRead, cacheWrite: cWrite });
-          costInput = est.input;
-          costOutput = est.output;
-          costCacheRead = est.cacheRead;
-          costCacheWrite = est.cacheWrite;
-          costTotal = est.total;
-          costSource = est.total > 0 ? 'estimated' : 'unpriced';
-        }
+      } else if (price) {
+        const est = estimateCost(price, { input: inp, output: out, cacheRead: cRead, cacheWrite: cWrite });
+        costInput = est.input;
+        costOutput = est.output;
+        costCacheRead = est.cacheRead;
+        costCacheWrite = est.cacheWrite;
+        costTotal = est.total;
+        costSource = est.total > 0 ? 'estimated' : 'unpriced';
       }
 
       calls.push({
