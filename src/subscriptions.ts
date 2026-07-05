@@ -32,9 +32,10 @@ export const SUBSCRIPTIONS: Subscription[] = [
     monthlyUsd: 20,
     provider: 'ollama',
     model: 'minimax-m2.5:cloud',
-    // Best guess: subscription started when we first saw minimax-m2.5:cloud
-    // calls in the trajectory (mid-April 2026). If earlier, adjust here.
-    activeFromMs: Date.parse('2026-04-19T00:00:00-07:00'),
+    // Matt set up Minimax cloud subscription end of Feb 2026 (confirmed
+    // 2026-07-05). First API call in trajectory logs is mid-April, but
+    // the monthly fee has been billing since Feb regardless.
+    activeFromMs: Date.parse('2026-02-28T00:00:00-08:00'),
     activeToMs: null,
   },
 ];
