@@ -615,19 +615,73 @@ main {
 
 /* --- Responsive: phone --- */
 @media (max-width: 780px) {
-  .rail { position: static; width: 100%; height: 64px; flex-direction: row; padding: 0 8px; }
+  .rail { position: static; width: 100%; height: 56px; flex-direction: row; padding: 0 8px; z-index: 5; }
   .rail-nav { flex-direction: row; }
   .rail-foot { margin-left: auto; }
   .rail-label { display: none; }
-  main { margin-left: 0 !important; }
-  .appbar { flex-wrap: wrap; padding: 12px 16px; }
+
+  main {
+    margin-left: 0 !important;
+    padding: 16px 12px 48px;
+    max-width: 100%;
+  }
+
+  /* Two-row appbar: title row on top, actions row below. */
+  .appbar {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 12px 8px;
+    gap: 8px;
+    margin-left: 0;
+  }
   .appbar-title h1 { font-size: 20px; }
-  .kpi-hero { grid-template-columns: 1fr; margin: 8px 12px; padding: 16px; }
+  .appbar-title .subtitle { font-size: 12px; }
+
+  /* Actions row: range toggle scrolls horizontally, Rescan pinned right. */
+  .appbar-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .updated { display: none; }  /* hide 'last updated' on phone — saves space */
+  .range-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .range-toggle::-webkit-scrollbar { display: none; }
+  .range-toggle button { padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
+
+  /* Compact Rescan: icon-only on phone. */
+  #rescan-btn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 0;             /* hide text */
+    gap: 0;
+  }
+  #rescan-btn .material-symbols-rounded { font-size: 20px; }
+
+  .kpi-hero { grid-template-columns: 1fr; margin: 8px 0; padding: 16px; }
   .kpi-hero-side { grid-template-columns: repeat(2, 1fr); }
   .kpi-hero-primary .kpi-value { font-size: 32px; }
-  .card-grid { grid-template-columns: 1fr !important; padding: 0 12px; }
-  .tbl-row { grid-template-columns: minmax(120px, 2fr) 80px 60px 70px 70px; font-size: 11px; }
-  .live-row { grid-template-columns: 80px 70px 1fr 70px 60px 70px; font-size: 10px; }
-  .live-row .live-channel { display: none; }
-  .range-toggle button { padding: 6px 10px; font-size: 11px; }
+  .card-grid { grid-template-columns: 1fr !important; padding: 0; }
+  .card { padding: 16px; margin-bottom: 16px; }
+
+  /* Tables: let them scroll horizontally instead of squashing. */
+  .tbl-row,
+  .live-row {
+    font-size: 12px;
+  }
+}
+
+/* --- Extra small phones --- */
+@media (max-width: 480px) {
+  .appbar-title .subtitle { display: none; }  /* save more vertical space */
+  .kpi-hero-side { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi-hero-primary .kpi-value { font-size: 28px; }
 }
